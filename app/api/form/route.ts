@@ -33,7 +33,7 @@ const columnMappings: { [key: string]: string } = {
 const appendReceiptIdRange = (range: string) => range.replace(/P/g, "Q");
 
 const getReceiptIdFromRowData = (rowData: any) => {
-  const receiptIdIndex = rowData.values[0].length -1;
+  const receiptIdIndex = rowData.values[0].length - 1;
   return rowData.values[0][receiptIdIndex];
 }
 
@@ -44,14 +44,22 @@ interface SheetResponse {
 
 export async function POST(request: Request) {
 
+  // Access the environment variable containing the JSON content
+  const serviceAccountJSON = process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON;
+
   const session = await getServerSession(authOptions);
 
   const body: FormDataInterface = await request.json();
   body['code'] = session?.code;
 
   try {
+
+    // Parse the JSON content for authentication
+    const credentials = JSON.parse(serviceAccountJSON);
+
+
     const auth = new google.auth.GoogleAuth({
-      keyFile: "service-account.json",
+      credentials,
       scopes: SCOPES,
     });
 
@@ -81,20 +89,20 @@ export async function POST(request: Request) {
     let globalReceiptId = ""
     if (updates && updates.updatedRange) {
       let updatedRowRange = updates.updatedRange;
-  
+
       const modifiedRowRange: string = appendReceiptIdRange(updatedRowRange);
-  
+
       const sheetRow = await sheets.spreadsheets.values.get({
         spreadsheetId: session?.sheetId,
         range: modifiedRowRange,
       })
-  
+
       if (sheetRow.data) {
         const receiptId = getReceiptIdFromRowData(sheetRow.data);
         globalReceiptId = receiptId
         requestBody[requestBody.length - 1] = receiptId;
-  
-  
+
+
         const masterDatasheetInsertRequest = {
           spreadsheetId: MASTER_SHEET_ID,
           range: "Sheet1", // Update with your sheet name
@@ -103,12 +111,12 @@ export async function POST(request: Request) {
             values: [requestBody],
           },
         };
-  
+
         await sheets.spreadsheets.values.append(
           masterDatasheetInsertRequest
         );
       }
-      }
+    }
 
     return Response.json({ status: "success", receiptId: globalReceiptId });
   } catch (error) {
